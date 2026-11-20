@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+::selection {
+  background-color: #c7d2fe;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
+
+.animate-rise-in {
+  animation: rise-in 0.2s ease-out;
+}
+
+/* FullCalendar v7 ships hashed class names; theme variables and our own event
+   class names are the stable styling hooks. */
+.dispatch-calendar {
+  --fc-classic-primary: #4f46e5;
+  --fc-classic-primary-foreground: #ffffff;
+  --fc-classic-event: #4f46e5;
+  --fc-classic-event-contrast: #ffffff;
+  --fc-classic-button: #4f46e5;
+  --fc-classic-button-border: #4f46e5;
+  --fc-classic-button-strong: #4338ca;
+  --fc-classic-button-strong-border: #3730a3;
+  --fc-classic-border: #e2e8f0;
+  --fc-classic-strong-border: #cbd5e1;
+  --fc-classic-foreground: #0f172a;
+  --fc-classic-muted-foreground: #64748b;
+  --fc-classic-faint-foreground: #94a3b8;
+  --fc-classic-today: #eef2ff;
+  --fc-classic-small-dot-width: 7px;
+  --fc-classic-large-dot-width: 9px;
+  font-size: 0.875rem;
+}
+
+.dispatch-calendar .fc-plan-event {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 1px 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+  background-color: var(--fc-event-color) !important;
+  border-color: var(--fc-event-color) !important;
+  color: var(--fc-event-contrast-color) !important;
+  opacity: 1;
+}
+
+.dispatch-calendar .fc-plan-warning {
+  box-shadow: inset 0 0 0 2px #f59e0b;
+}
+
+.dispatch-calendar .fc-plan-done {
+  opacity: 0.5;
+  text-decoration: line-through;
+}

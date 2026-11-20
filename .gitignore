@@ -1,0 +1,91 @@
+# ---------------------------------------------------------------------------
+# Private planning, specification and operating documents
+# ---------------------------------------------------------------------------
+claude.md
+CLAUDE.md
+MANUAL.md
+manual.md
+SPEC.md
+spec/
+docs/internal/
+
+# ---------------------------------------------------------------------------
+# Test suites, test configuration and test tooling
+# ---------------------------------------------------------------------------
+backend/tests/
+backend/pytest.ini
+backend/requirements-dev.txt
+frontend/tests/
+frontend/playwright.config.ts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+**/.pytest_cache/
+**/coverage/
+**/.coverage
+**/htmlcov/
+
+# ---------------------------------------------------------------------------
+# One-time client demo loader (not part of the application)
+# ---------------------------------------------------------------------------
+backend/app/seed_demo.py
+
+# ---------------------------------------------------------------------------
+# Environment and secrets
+# ---------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+!.env.example
+!**/.env.example
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+.venv/
+**/.venv/
+venv/
+**/venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# ---------------------------------------------------------------------------
+# Node / Next.js
+# ---------------------------------------------------------------------------
+**/node_modules/
+**/.next/
+**/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Tool / editor / OS artifacts
+# ---------------------------------------------------------------------------
+AGENTS.md
+**/AGENTS.md
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Logs and local scratch files
+# ---------------------------------------------------------------------------
+*.log
+*.tmp
+*.bak
