@@ -55,8 +55,8 @@ function ChartCard({
 }
 
 export function DashboardCharts({ report }: { report: DashboardSummary }) {
-  const totalRejected = report.issues.reduce((sum, issue) => sum + issue.quantity, 0);
-  const topIssues = report.issues.slice(0, 8);
+  const totalRejected = report.unit_rejections.reduce((sum, issue) => sum + issue.quantity, 0);
+  const topIssues = report.unit_rejections.slice(0, 8);
   const pareto = topIssues.map((issue, index) => {
     const cumulative = topIssues
       .slice(0, index + 1)
@@ -72,8 +72,8 @@ export function DashboardCharts({ report }: { report: DashboardSummary }) {
   return (
     <div className="space-y-4">
       <ChartCard
-        title="Monthly planned, dispatched and rejected"
-        description={`Quantities per month in ${report.fy}.`}
+        title="Monthly dispatch plan, net sales and rejections"
+        description={`Quantities in ${report.fy}. Net sales use invoice month; rejections use actual rejection month.`}
       >
         <ResponsiveContainer width="100%" height={290}>
           <BarChart data={report.months} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -101,15 +101,15 @@ export function DashboardCharts({ report }: { report: DashboardSummary }) {
               maxBarSize={22}
             />
             <Bar
-              dataKey="dispatched"
-              name="Dispatched"
+              dataKey="sales"
+              name="Net sales"
               fill="#4f46e5"
               radius={[4, 4, 0, 0]}
               maxBarSize={22}
             />
             <Bar
               dataKey="rejected"
-              name="Rejected"
+              name="Rejections recorded"
               fill="#e11d48"
               radius={[4, 4, 0, 0]}
               maxBarSize={22}
@@ -119,8 +119,8 @@ export function DashboardCharts({ report }: { report: DashboardSummary }) {
       </ChartCard>
 
       <ChartCard
-        title="Top rejection issues"
-        description={`Rejected quantity by issue in ${report.fy}, with cumulative share.`}
+        title="Top units by rejections"
+        description={`Rejected quantity by unit in ${report.fy}, with cumulative share.`}
       >
         {pareto.length === 0 ? (
           <div className="flex h-[260px] items-center justify-center text-sm text-slate-500">

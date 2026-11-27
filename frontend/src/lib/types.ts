@@ -19,7 +19,10 @@ export interface Page<T> {
 export interface Item {
   id: number;
   name: string;
+  project: string;
   family: string;
+  model_no: string | null;
+  current_inventory: number;
   reorder_level: number;
   critical_level: number;
   is_active: boolean;
@@ -72,7 +75,11 @@ export type WriteResource =
   | "purchase_orders"
   | "planning"
   | "dispatches"
-  | "rejections";
+  | "rejections"
+  | "units"
+  | "purchases"
+  | "purchase_plans"
+  | "purchase_rejections";
 
 export function canWrite(role: Role | undefined, resource: WriteResource): boolean {
   if (!role) return false;
@@ -102,6 +109,7 @@ export type PlanStatus = "PLANNED" | "PARTIAL" | "DONE";
 export type ScheduleFilter = "ALL" | "CRITICAL" | "BELOW_REORDER" | "SHORTFALL" | "REPLENISH" | "OK";
 
 export interface POLine {
+  project: string;
   id: number;
   item_id: number;
   item_name: string;
@@ -114,6 +122,7 @@ export interface POLine {
 }
 
 export interface PurchaseOrderSummary {
+  unit_ids: number[];
   id: number;
   po_number: string;
   customer_name: string;
@@ -128,6 +137,7 @@ export interface PurchaseOrderSummary {
 }
 
 export interface PurchaseOrder extends PurchaseOrderSummary {
+  unit_ids: number[];
   lines: POLine[];
 }
 
@@ -148,17 +158,28 @@ export interface POLineOption {
   available_to_plan: number;
 }
 
+export interface Unit {
+  id: number;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface DispatchPlan {
   id: number;
-  po_line_id: number;
-  po_id: number;
-  po_number: string;
-  customer_name: string;
-  unit_number: string;
+  po_line_id: number | null;
+  po_id: number | null;
+  po_number: string | null;
+  customer_name: string | null;
+  unit_number: string | null;
+  unit_id: number | null;
+  unit_name: string | null;
   item_id: number;
   item_name: string;
   item_family: string;
+  project: string;
   planned_date: string;
+  planned_end_date: string;
   quantity: number;
   fulfilled_quantity: number;
   outstanding_quantity: number;
@@ -166,6 +187,7 @@ export interface DispatchPlan {
   status: PlanStatus;
   lead_time_days: number;
   days_until: number;
+  days_until_end: number;
   warning: boolean;
   po_quantity: number;
   po_planned: number;
@@ -182,14 +204,19 @@ export interface PlanningSettings {
 
 export interface DispatchRecord {
   id: number;
-  po_line_id: number;
-  po_id: number;
-  po_number: string;
-  customer_name: string;
-  unit_number: string;
+  plan_id: number | null;
+  po_line_id: number | null;
+  po_id: number | null;
+  po_number: string | null;
+  customer_name: string | null;
+  unit_number: string | null;
+  unit_id: number | null;
+  unit_name: string | null;
+  invoice_number: string | null;
   item_id: number;
   item_name: string;
   item_family: string;
+  project: string;
   dispatch_date: string;
   quantity: number;
   remarks: string | null;
@@ -200,6 +227,7 @@ export interface DispatchMonth {
   label: string;
   planned: number;
   dispatched: number;
+  sales: number;
   cumulative: number;
 }
 
@@ -208,6 +236,7 @@ export interface DispatchFYTotal {
   start_year: number;
   dispatched: number;
   planned: number;
+  sales: number;
 }
 
 export interface DispatchReport {
@@ -219,6 +248,7 @@ export interface DispatchReport {
   fy_totals: DispatchFYTotal[];
   total_dispatched: number;
   total_planned: number;
+  total_sales: number;
   cumulative_dispatched: number;
   dispatch_count: number;
 }
@@ -231,7 +261,11 @@ export interface RejectionIssue {
 }
 
 export interface RejectionRecord {
+  project: string;
   id: number;
+  rgp_number: string | null;
+  unit_id: number | null;
+  unit_name: string | null;
   item_id: number;
   item_name: string;
   item_family: string;
@@ -276,7 +310,12 @@ export interface DashboardKPIs {
   below_reorder_items: number;
   total_shortfall: number;
   month_planned: number;
+  month_stock_available: number;
   month_dispatched: number;
+  month_sales: number;
+  month_gross_sales: number;
+  month_sales_rejected: number;
+  month_unlinked_rejected: number;
   month_rejected: number;
 }
 
@@ -285,6 +324,7 @@ export interface DashboardMonth {
   label: string;
   planned: number;
   dispatched: number;
+  sales: number;
   rejected: number;
 }
 
@@ -297,8 +337,8 @@ export interface DashboardCalendarDay {
   emergency: number;
 }
 
-export interface DashboardIssue {
-  issue_id: number;
+export interface DashboardUnit {
+  unit_id: number;
   name: string;
   quantity: number;
   count: number;
@@ -316,10 +356,11 @@ export interface DashboardSummary {
   kpis: DashboardKPIs;
   months: DashboardMonth[];
   calendar: DashboardCalendarDay[];
-  issues: DashboardIssue[];
+  unit_rejections: DashboardUnit[];
 }
 
 export interface StockScheduleRow {
+  project: string;
   item_id: number;
   name: string;
   family: string;

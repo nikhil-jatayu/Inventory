@@ -59,8 +59,8 @@ export function DispatchCharts({ report }: { report: DispatchReport }) {
   return (
     <div className="space-y-4">
       <ChartCard
-        title="Planned vs actual"
-        description="Planned and dispatched quantity per month in the selected financial year."
+        title="Monthly dispatch plan vs sales"
+        description="Planned quantity and sales generated from actual dispatches per month."
       >
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={report.months} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -85,8 +85,8 @@ export function DispatchCharts({ report }: { report: DispatchReport }) {
               maxBarSize={30}
             />
             <Bar
-              dataKey="dispatched"
-              name="Dispatched"
+              dataKey="sales"
+              name="Net sales"
               fill="#4f46e5"
               radius={[4, 4, 0, 0]}
               maxBarSize={30}
@@ -125,7 +125,7 @@ export function DispatchCharts({ report }: { report: DispatchReport }) {
 
         <ChartCard
           title="Financial year comparison"
-          description="Dispatched and planned quantities by financial year (April–March)."
+          description="Sales generated from actual dispatches and planned quantities by financial year (April–March)."
         >
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={report.fy_totals} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -146,8 +146,8 @@ export function DispatchCharts({ report }: { report: DispatchReport }) {
                 maxBarSize={40}
               />
               <Bar
-                dataKey="dispatched"
-                name="Dispatched"
+                dataKey="sales"
+                name="Net sales"
                 fill="#4f46e5"
                 radius={[4, 4, 0, 0]}
                 maxBarSize={40}

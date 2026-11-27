@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # Planning defaults (April-March financial year, priority lead times).
     fy_start_month: int = 4
     lead_time_normal_days: int = 15
-    lead_time_urgent_days: int = 10
+    lead_time_urgent_days: int = 7
     lead_time_emergency_days: int = 4
 
     @field_validator("fy_start_month")

@@ -1,0 +1,12 @@
+"use client";
+import { Plus, Trash2 } from "lucide-react";
+import { ItemPicker, type ItemOption } from "@/components/item-picker";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/field";
+import { formatQuantity } from "@/lib/utils";
+export interface ItemLine { key: string; item: ItemOption | null; quantity: string; committed?: number }
+export function blankItemLine(): ItemLine { return { key: Math.random().toString(36).slice(2), item: null, quantity: "" }; }
+export function ItemLines<T extends ItemLine>({lines, onChange, blank, disabled, extraHeader, extraCell}: {lines:T[]; onChange:(rows:T[])=>void; blank:()=>T; disabled?:boolean; extraHeader?:string; extraCell?:(row:T)=>React.ReactNode}) {
+  function update(key:string, changes:Partial<ItemLine>) { onChange(lines.map(row=>row.key===key?{...row,...changes}:row)); }
+  return <div className="space-y-3"><div className="rounded-lg border border-slate-200"><table className="w-full text-sm"><thead className="bg-slate-50 text-xs text-slate-600"><tr><th className="p-2 w-16">Sr. No.</th><th className="p-2 text-left">Item</th><th className="p-2 w-28 text-left">Quantity</th>{extraHeader&&<th className="p-2 text-left">{extraHeader}</th>}<th className="w-12"/></tr></thead><tbody>{lines.map((row,i)=><tr key={row.key} className="border-t border-slate-100"><td className="p-2 text-center">{i+1}</td><td className="p-2"><ItemPicker value={row.item} onChange={item=>update(row.key,{item})} disabled={disabled||Boolean(row.committed)}/></td><td className="p-2"><Input aria-label={`Quantity ${i+1}`} type="number" min={row.committed||0.01} step="0.01" required value={row.quantity} onChange={e=>update(row.key,{quantity:e.target.value})} disabled={disabled}/></td>{extraCell&&<td className="p-2">{extraCell(row)}</td>}<td className="p-2"><Button type="button" variant="ghost" size="icon" aria-label={`Remove item ${i+1}`} disabled={disabled||lines.length===1||Boolean(row.committed)} onClick={()=>onChange(lines.filter(x=>x.key!==row.key))}><Trash2 className="h-4 w-4 text-rose-500"/></Button></td></tr>)}</tbody></table></div><div className="flex items-center justify-between gap-2"><Button type="button" variant="secondary" disabled={disabled||lines.length>=100} onClick={()=>onChange([...lines,blank()])}><Plus className="h-4 w-4"/> Add Item</Button><strong className="text-sm">Total: {formatQuantity(lines.reduce((sum,row)=>sum+(Number(row.quantity)||0),0))}</strong></div></div>;
+}

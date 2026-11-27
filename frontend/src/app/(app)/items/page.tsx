@@ -112,13 +112,13 @@ export default function ItemsPage() {
     }
   }
 
-  const columnCount = writable ? 6 : 5;
+  const columnCount = writable ? 10 : 9;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Item Master"
-        description="Maintain items, families and the stock levels that drive status alerts."
+        description="Maintain item descriptions, projects, families, model numbers and stock thresholds."
         actions={
           writable && (
             <Button onClick={openCreate}>
@@ -151,7 +151,7 @@ export default function ItemsPage() {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search by item name or family"
+              placeholder="Search by item, project, family or model"
               className="pl-9"
               aria-label="Search items"
             />
@@ -223,8 +223,12 @@ export default function ItemsPage() {
         <table className="min-w-full divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50/70">
             <tr>
+              <th className="px-3 py-3 text-xs text-slate-500">Sr. No.</th>
               <SortHeader label="Item" column="name" sort={sort} order={order} onSort={handleSort} />
+              <th scope="col" className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Project</th>
               <SortHeader label="Family" column="family" sort={sort} order={order} onSort={handleSort} />
+              <th scope="col" className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">Model No.</th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-semibold tracking-wide text-slate-500 uppercase">Inventory</th>
               <SortHeader
                 label="Reorder"
                 column="reorder_level"
@@ -255,13 +259,18 @@ export default function ItemsPage() {
             ) : !data || data.items.length === 0 ? (
               <EmptyRow colSpan={columnCount} message="No items match these filters." />
             ) : (
-              data.items.map((item) => (
-                <tr key={item.id} className="transition-colors hover:bg-slate-50/60">
+              data.items.map((item, index) => (
+                <tr key={item.id} className="transition-colors hover:bg-slate-50/60"><td className="px-3 text-center">{(data.page-1)*data.page_size+index+1}</td>
                   <td className="px-4 py-3">
                     <p className="font-medium text-slate-900">{item.name}</p>
                     <p className="text-xs text-slate-400">Added {formatDate(item.created_at)}</p>
                   </td>
+                  <td className="px-4 py-3 text-slate-600">{item.project}</td>
                   <td className="px-4 py-3 text-slate-600">{item.family}</td>
+                  <td className="px-4 py-3 text-slate-600">{item.model_no || "—"}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                    {formatQuantity(item.current_inventory)}
+                  </td>
                   <td className="px-4 py-3 tabular-nums text-slate-600">
                     {formatQuantity(item.reorder_level)}
                   </td>

@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ItemLines } from "@/components/ui/item-lines";
 
-import { ItemPicker, type ItemOption } from "@/components/item-picker";
+import { type ItemOption } from "@/components/item-picker";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { api } from "@/lib/api";
-import type { PurchaseOrder } from "@/lib/types";
+import { useApiQuery } from "@/lib/hooks";
+import type { PurchaseOrder, Unit } from "@/lib/types";
 import { formatQuantity, todayISO } from "@/lib/utils";
 
 interface LineDraft {
@@ -32,7 +33,7 @@ function draftsFromOrder(po: PurchaseOrder): LineDraft[] {
   if (po.lines.length === 0) return [blankLine()];
   return po.lines.map((line) => ({
     key: `line-${line.id}`,
-    item: { id: line.item_id, name: line.item_name, family: line.item_family },
+    item: { id: line.item_id, name: line.item_name, family: line.item_family, project: line.project },
     quantity: String(line.quantity),
     committed: line.planned_quantity + line.dispatched_quantity,
   }));
@@ -47,31 +48,20 @@ interface PurchaseOrderModalProps {
 
 export function PurchaseOrderModal({ open, po, onClose, onSaved }: PurchaseOrderModalProps) {
   const [poNumber, setPoNumber] = useState(po?.po_number ?? "");
-  const [customerName, setCustomerName] = useState(po?.customer_name ?? "");
-  const [unitNumber, setUnitNumber] = useState(po?.unit_number ?? "");
-  const [poDate, setPoDate] = useState(po?.po_date ?? todayISO());
+  const [poDate] = useState(po?.po_date ?? todayISO());
+  const [unitIds, setUnitIds] = useState<string[]>(po?.unit_ids?.map(String) ?? []);
   const [lines, setLines] = useState<LineDraft[]>(po ? draftsFromOrder(po) : [blankLine()]);
+  const unitsQuery = useApiQuery<Unit[]>(open ? "/units" : null);
+  const units = unitsQuery.data ?? [];
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  function updateLine(key: string, changes: Partial<LineDraft>) {
-    setLines((current) =>
-      current.map((line) => (line.key === key ? { ...line, ...changes } : line)),
-    );
-  }
-
-  function removeLine(key: string) {
-    setLines((current) =>
-      current.length === 1 ? current : current.filter((line) => line.key !== key),
-    );
-  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
-    if (!poNumber.trim() || !customerName.trim() || !unitNumber.trim()) {
-      setError("PO number, customer name and unit number are required.");
+    if (!/^\d{8}$/.test(poNumber.trim())) {
+      setError("PO number must contain exactly eight digits.");
       return;
     }
 
@@ -101,11 +91,18 @@ export function PurchaseOrderModal({ open, po, onClose, onSaved }: PurchaseOrder
 
     setSaving(true);
     try {
+      const selectedUnits = unitIds.filter(Boolean).map(Number);
+      if (new Set(selectedUnits).size !== selectedUnits.length) {
+        setError("Select a different location in each Unit field.");
+        setSaving(false);
+        return;
+      }
       const body = {
         po_number: poNumber.trim(),
-        customer_name: customerName.trim(),
-        unit_number: unitNumber.trim(),
+        customer_name: po?.customer_name ?? "",
+        unit_number: po?.unit_number ?? "",
         po_date: poDate,
+        unit_ids: selectedUnits,
         lines: lines.map((line) => ({
           item_id: line.item!.id,
           quantity: Number(line.quantity),
@@ -133,7 +130,7 @@ export function PurchaseOrderModal({ open, po, onClose, onSaved }: PurchaseOrder
       description={
         po
           ? "Update the header or line quantities. Quantities with planning or dispatch history cannot be reduced below the committed amount."
-          : "Record a customer purchase order and its item lines."
+          : "Record the eight-digit PO reference and item quantities for bookkeeping. Dispatch plans and sales are managed separately."
       }
       size="lg"
       footer={
@@ -155,125 +152,25 @@ export function PurchaseOrderModal({ open, po, onClose, onSaved }: PurchaseOrder
             <Input
               id="po-number"
               value={poNumber}
-              onChange={(event) => setPoNumber(event.target.value)}
-              placeholder="e.g. PO-1042"
+              onChange={(event) => setPoNumber(event.target.value.replace(/\D/g, "").slice(0, 8))}
+              placeholder="e.g. 00012345"
+              inputMode="numeric"
+              maxLength={8}
+              pattern="[0-9]{8}"
               autoFocus
               required
             />
           </Field>
-          <Field label="PO date" htmlFor="po-date" required>
-            <Input
-              id="po-date"
-              type="date"
-              value={poDate}
-              onChange={(event) => setPoDate(event.target.value)}
-              required
-            />
-          </Field>
-          <Field label="Customer" htmlFor="po-customer" required>
-            <Input
-              id="po-customer"
-              value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
-              placeholder="Customer name"
-              required
-            />
-          </Field>
-          <Field label="Unit number" htmlFor="po-unit" required>
-            <Input
-              id="po-unit"
-              value={unitNumber}
-              onChange={(event) => setUnitNumber(event.target.value)}
-              placeholder="e.g. UNIT-77"
-              required
-            />
+          <Field label="PO date (automatic)" htmlFor="po-date">
+            <Input id="po-date" type="date" value={poDate} readOnly disabled />
           </Field>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Lines</h3>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setLines((current) => [...current, blankLine()])}
-              disabled={saving}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add line
-            </Button>
-          </div>
+        <Field label="Units / Locations (optional)"><div className="flex flex-wrap gap-3 rounded-lg border border-slate-200 p-3">{units.map(unit=><label key={unit.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unitIds.includes(String(unit.id))} disabled={saving} onChange={e=>setUnitIds(old=>e.target.checked?[...old,String(unit.id)]:old.filter(id=>id!==String(unit.id)))}/>{unit.name}</label>)}</div></Field>
+        {unitsQuery.error && <Alert tone="error">{unitsQuery.error}</Alert>}
 
-          <div className="space-y-2.5">
-            {lines.map((line, index) => (
-              <div
-                key={line.key}
-                className="rounded-xl border border-slate-200 bg-slate-50/60 p-3"
-              >
-                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start">
-                  <div className="min-w-0 flex-1">
-                    <Field label={`Item ${index + 1}`} required>
-                      <ItemPicker
-                        value={line.item}
-                        onChange={(item) => updateLine(line.key, { item })}
-                        disabled={saving}
-                      />
-                    </Field>
-                  </div>
-                  <div className="sm:w-40">
-                    <Field
-                      label="Quantity"
-                      htmlFor={`po-qty-${line.key}`}
-                      hint={
-                        line.committed > 0
-                          ? `Committed ${formatQuantity(line.committed)}`
-                          : undefined
-                      }
-                      required
-                    >
-                      <Input
-                        id={`po-qty-${line.key}`}
-                        type="number"
-                        min={line.committed > 0 ? line.committed : 0.01}
-                        step="0.01"
-                        value={line.quantity}
-                        onChange={(event) =>
-                          updateLine(line.key, { quantity: event.target.value })
-                        }
-                        placeholder="0"
-                        disabled={saving}
-                        required
-                      />
-                    </Field>
-                  </div>
-                  <div className="sm:pt-6">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeLine(line.key)}
-                      disabled={saving || lines.length === 1}
-                      aria-label={`Remove line ${index + 1}`}
-                      title={
-                        lines.length === 1
-                          ? "A purchase order needs at least one line"
-                          : "Remove line"
-                      }
-                    >
-                      <Trash2 className="h-4 w-4 text-rose-500" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <p className="text-xs text-slate-500">
-          Lines with planning or dispatch history cannot be removed, and their ordered quantity
-          cannot drop below planned + dispatched.
-        </p>
+        <ItemLines lines={lines} onChange={setLines} blank={blankLine} disabled={saving}/>
+        {po && <p className="text-xs text-slate-500">Historical PO-linked quantities cannot be reduced or removed.</p>}
       </form>
     </Modal>
   );

@@ -12,6 +12,7 @@ export interface ItemOption {
   id: number;
   name: string;
   family: string;
+  project?: string;
 }
 
 interface ItemPickerProps {
@@ -31,11 +32,7 @@ export function ItemPicker({ value, onChange, placeholder = "Search items…", d
       ? `/items${qs({ search: debouncedQuery, is_active: true, sort: "name", page_size: 20 })}`
       : null,
   );
-  const options = (itemsQuery.data?.items ?? []).map(({ id, name, family }) => ({
-    id,
-    name,
-    family,
-  }));
+  const options = (itemsQuery.data?.items ?? []).map(({ id, name, family, project }) => ({ id, name, family, project }));
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -52,7 +49,7 @@ export function ItemPicker({ value, onChange, placeholder = "Search items…", d
       <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-slate-800">{value.name}</p>
-          <p className="text-xs text-slate-500">{value.family}</p>
+          <p className="text-xs text-slate-500">{value.project ? `${value.project} · ` : ""}{value.family}</p>
         </div>
         {!disabled && (
           <button
@@ -111,7 +108,7 @@ export function ItemPicker({ value, onChange, placeholder = "Search items…", d
                 )}
               >
                 <span className="text-sm font-medium text-slate-800">{option.name}</span>
-                <span className="text-xs text-slate-500">{option.family}</span>
+                <span className="text-xs text-slate-500">{option.project ? `${option.project} · ` : ""}{option.family}</span>
               </button>
             ))
           )}

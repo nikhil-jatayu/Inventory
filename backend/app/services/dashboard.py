@@ -1,3 +1,5 @@
+from app.services.balances import net_sale
+from app.models import Unit
 from datetime import date
 
 from sqlalchemy import and_, case, func, literal, select
@@ -22,11 +24,11 @@ from app.models import (
     PlanStatus,
     Priority,
     Rejection,
-    RejectionIssue,
+    SalesRecord,
 )
 from app.schemas.dashboard import (
     DashboardCalendarDay,
-    DashboardIssue,
+    DashboardUnit,
     DashboardKPIs,
     DashboardMonth,
     DashboardSummary,
@@ -154,6 +156,15 @@ def get_dashboard(
             )
         )
     )
+    # This is current real-time stock, compared against the selected month's plan.
+    month_stock_available = as_decimal(
+        db.scalar(
+            select(func.coalesce(func.sum(available), literal(0)))
+            .select_from(Item)
+            .outerjoin(sums, sums.c.item_id == Item.id)
+            .where(*active_item_filters)
+        )
+    )
     month_dispatched = as_decimal(
         db.scalar(
             select(func.coalesce(func.sum(Dispatch.quantity), literal(0)))
@@ -166,6 +177,20 @@ def get_dashboard(
             )
         )
     )
+    month_sales = as_decimal(
+        db.scalar(
+            select(func.coalesce(func.sum(net_sale()), literal(0)))
+            .select_from(SalesRecord)
+            .join(Item, Item.id == SalesRecord.item_id)
+            .where(
+                SalesRecord.invoice_date >= month_start,
+                SalesRecord.invoice_date <= month_end,
+                *family_filters,
+            )
+        )
+    )
+    month_gross_sales = as_decimal(db.scalar(select(func.coalesce(func.sum(SalesRecord.quantity),0)).select_from(SalesRecord).join(Item,Item.id==SalesRecord.item_id).where(SalesRecord.invoice_date>=month_start,SalesRecord.invoice_date<=month_end,*family_filters)))
+    month_unlinked_rejected = as_decimal(db.scalar(select(func.coalesce(func.sum(Rejection.quantity),0)).select_from(Rejection).join(Item,Item.id==Rejection.item_id).where(Rejection.rejection_date>=month_start,Rejection.rejection_date<=month_end,Rejection.dispatch_id.is_(None),*family_filters)))
     month_rejected = as_decimal(
         db.scalar(
             select(func.coalesce(func.sum(Rejection.quantity), literal(0)))
@@ -184,7 +209,12 @@ def get_dashboard(
         below_reorder_items=int(status_row[1] or 0),
         total_shortfall=as_decimal(status_row[2]),
         month_planned=month_planned,
+        month_stock_available=month_stock_available,
         month_dispatched=month_dispatched,
+        month_sales=month_sales,
+        month_gross_sales=month_gross_sales,
+        month_sales_rejected=month_gross_sales-month_sales,
+        month_unlinked_rejected=month_unlinked_rejected,
         month_rejected=month_rejected,
     )
 
@@ -227,6 +257,8 @@ def get_dashboard(
     dispatched_month = func.extract("month", Dispatch.dispatch_date)
     rejected_year = func.extract("year", Rejection.rejection_date)
     rejected_month = func.extract("month", Rejection.rejection_date)
+    sales_year = func.extract("year", SalesRecord.invoice_date)
+    sales_month = func.extract("month", SalesRecord.invoice_date)
 
     planned_rows = db.execute(
         select(planned_year, planned_month, func.sum(DispatchPlan.quantity))
@@ -262,6 +294,18 @@ def get_dashboard(
         .group_by(rejected_year, rejected_month)
     ).all()
 
+    sales_rows = db.execute(
+        select(sales_year, sales_month, func.sum(net_sale()))
+        .select_from(SalesRecord)
+        .join(Item, Item.id == SalesRecord.item_id)
+        .where(
+            SalesRecord.invoice_date >= fy_start,
+            SalesRecord.invoice_date <= fy_end,
+            *family_filters,
+        )
+        .group_by(sales_year, sales_month)
+    ).all()
+
     planned_by_month = {
         (int(row[0]), int(row[1])): as_decimal(row[2]) for row in planned_rows
     }
@@ -270,6 +314,9 @@ def get_dashboard(
     }
     rejected_by_month = {
         (int(row[0]), int(row[1])): as_decimal(row[2]) for row in rejected_rows
+    }
+    sales_by_month = {
+        (int(row[0]), int(row[1])): as_decimal(row[2]) for row in sales_rows
     }
 
     month_stats = []
@@ -281,38 +328,38 @@ def get_dashboard(
                 label=month_label(bucket),
                 planned=planned_by_month.get(key, ZERO),
                 dispatched=dispatched_by_month.get(key, ZERO),
+                sales=sales_by_month.get(key, ZERO),
                 rejected=rejected_by_month.get(key, ZERO),
             )
         )
 
-    issue_rows = db.execute(
+    unit_rows = db.execute(
         select(
-            RejectionIssue.id,
-            RejectionIssue.name,
+            func.coalesce(Unit.id, 0),
+            func.coalesce(Unit.name, "Unassigned"),
             func.sum(Rejection.quantity),
             func.count(Rejection.id),
         )
-        .select_from(RejectionIssue)
-        .join(Rejection, Rejection.issue_id == RejectionIssue.id)
+        .select_from(Rejection)
+        .outerjoin(Unit, Unit.id == Rejection.unit_id)
         .join(Item, Item.id == Rejection.item_id)
         .where(
             Rejection.rejection_date >= fy_start,
             Rejection.rejection_date <= fy_end,
             *family_filters,
         )
-        .group_by(RejectionIssue.id, RejectionIssue.name)
-        .order_by(func.sum(Rejection.quantity).desc(), RejectionIssue.name)
-        .limit(10)
+        .group_by(Unit.id, Unit.name)
+        .order_by(func.sum(Rejection.quantity).desc(), Unit.name)
     ).all()
 
-    issues = [
-        DashboardIssue(
-            issue_id=issue_id,
+    units = [
+        DashboardUnit(
+            unit_id=unit_id,
             name=name,
             quantity=as_decimal(quantity),
             count=int(count),
         )
-        for issue_id, name, quantity, count in issue_rows
+        for unit_id, name, quantity, count in unit_rows
     ]
 
     return DashboardSummary(
@@ -327,7 +374,7 @@ def get_dashboard(
         kpis=kpis,
         months=month_stats,
         calendar=calendar,
-        issues=issues,
+        unit_rejections=units,
     )
 
 

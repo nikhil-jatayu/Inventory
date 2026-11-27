@@ -1,88 +1,27 @@
 "use client";
+import { useEffect, useState } from "react";
+import type { DispatchPlan } from "@/lib/types";
+import { formatQuantity } from "@/lib/utils";
+import { timelineRange } from "@/lib/planning";
+import { ContinuousTimeline, type TimelineRange } from "./continuous-timeline";
 
-import FullCalendar from "@fullcalendar/react";
-import type {
-  DateClickInfo,
-  DatesSetInfo,
-  EventClickInfo,
-  EventDisplayInfo,
-  MountInfo,
-} from "@fullcalendar/react";
-import dayGridPlugin from "@fullcalendar/react/daygrid";
-import interactionPlugin from "@fullcalendar/react/interaction";
-import classicThemePlugin from "@fullcalendar/react/themes/classic";
-
-import "@fullcalendar/react/skeleton.css";
-import "@fullcalendar/react/themes/classic/theme.css";
-import "@fullcalendar/react/themes/classic/palette.css";
-
-import { PRIORITY_COLORS, type DispatchPlan } from "@/lib/types";
-import { cn, formatQuantity, isoDate } from "@/lib/utils";
-
-interface DispatchCalendarProps {
-  plans: DispatchPlan[];
-  onSelectPlan: (plan: DispatchPlan) => void;
+export type GanttPlan = DispatchPlan & { actual_dispatches: { id: number; dispatch_date: string; quantity: number }[] };
+interface Props {
+  plans: GanttPlan[];
+  range?: TimelineRange;
+  loading?: boolean;
+  onSelectPlan?: (plan: DispatchPlan) => void;
+  onRangeChange?: (from: string, to: string) => void;
   onSelectDate?: (date: string) => void;
-  onRangeChange: (from: string, to: string) => void;
 }
-
-export function DispatchCalendar({
-  plans,
-  onSelectPlan,
-  onSelectDate,
-  onRangeChange,
-}: DispatchCalendarProps) {
-  const events = plans.map((plan) => ({
-    id: String(plan.id),
-    title: `${plan.item_name} · ${formatQuantity(plan.quantity)}`,
-    start: plan.planned_date,
-    allDay: true,
-    className: cn(
-      "fc-plan-event",
-      plan.warning && "fc-plan-warning",
-      plan.status === "DONE" && "fc-plan-done",
-    ),
-    extendedProps: { plan },
-  }));
-
-  function handleEventMount(info: MountInfo<EventDisplayInfo>) {
-    const plan = info.event.extendedProps.plan as DispatchPlan | undefined;
-    if (!plan) return;
-    info.el.style.setProperty("--fc-event-color", PRIORITY_COLORS[plan.priority].background);
-    info.el.style.setProperty("--fc-event-contrast-color", "#ffffff");
-    info.el.title = `${plan.po_number} · ${plan.customer_name} · ${plan.item_name} · ${formatQuantity(plan.quantity)} (${plan.priority.toLowerCase()})`;
-  }
-
-  function handleDatesSet(info: DatesSetInfo) {
-    const lastDay = new Date(info.end.getFullYear(), info.end.getMonth(), info.end.getDate() - 1);
-    onRangeChange(isoDate(info.start), isoDate(lastDay));
-  }
-
-  function handleEventClick(info: EventClickInfo) {
-    const plan = info.event.extendedProps.plan as DispatchPlan | undefined;
-    if (plan) onSelectPlan(plan);
-  }
-
-  function handleDateClick(info: DateClickInfo) {
-    onSelectDate?.(info.dateStr);
-  }
-
-  return (
-    <div className="dispatch-calendar">
-      <FullCalendar
-        plugins={[dayGridPlugin, interactionPlugin, classicThemePlugin]}
-        initialView="dayGridMonth"
-        headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
-        firstDay={1}
-        fixedWeekCount={false}
-        dayMaxEvents={3}
-        height="auto"
-        events={events}
-        eventDidMount={handleEventMount}
-        datesSet={handleDatesSet}
-        eventClick={handleEventClick}
-        dateClick={onSelectDate ? handleDateClick : undefined}
-      />
-    </div>
-  );
+export function DispatchCalendar({plans,range,loading,onSelectPlan,onRangeChange,onSelectDate}:Props) {
+  const [initialRange] = useState(() => timelineRange());
+  const activeRange = range ?? initialRange;
+  const {from,to} = activeRange;
+  useEffect(()=>{onRangeChange?.(from,to);},[from,to,onRangeChange]);
+  return <ContinuousTimeline mode="dispatch" range={activeRange} loading={loading} onSelectDate={onSelectDate} onSelectPlan={onSelectPlan ? id=>{const plan=plans.find(p=>p.id===id);if(plan)onSelectPlan(plan);} : undefined} rows={plans.map(p=>({
+    id:p.id,item_name:p.item_name,project:p.project,planned_date:p.planned_date,planned_end_date:p.planned_end_date,quantity:p.quantity,category:p.priority,closed:p.status==="DONE",actuals:p.actual_dispatches,
+    detail:`${p.unit_name??p.unit_number??"Unit not set"} · ${p.status}`,
+    totals:`${formatQuantity(p.quantity)} / ${formatQuantity(p.fulfilled_quantity)} / ${formatQuantity(p.outstanding_quantity)}${p.status!=="DONE"&&p.days_until_end<0?" · Overdue":p.warning?" · Short duration":""}`,
+  }))}/>;
 }

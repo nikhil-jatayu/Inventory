@@ -89,3 +89,6 @@ desktop.ini
 *.log
 *.tmp
 *.bak
+
+# Local demonstration manifest (never commit)
+.inventory-demo-state.json

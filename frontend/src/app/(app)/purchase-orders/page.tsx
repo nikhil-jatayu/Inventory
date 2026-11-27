@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { Eye, Plus, Search, SlidersHorizontal } from "lucide-react";
 
-import { PlanModal, type PlanLineContext } from "@/components/planning/plan-modal";
-import { DispatchModal, type DispatchLineContext } from "@/components/dispatches/dispatch-modal";
 import { PurchaseOrderDetailModal } from "@/components/purchase-orders/po-detail-modal";
 import { PurchaseOrderModal } from "@/components/purchase-orders/po-modal";
 import { Alert } from "@/components/ui/alert";
@@ -29,6 +27,7 @@ import {
   type Page,
   type PurchaseOrder,
   type PurchaseOrderSummary,
+  type Unit,
 } from "@/lib/types";
 import { formatDate, formatQuantity } from "@/lib/utils";
 
@@ -67,14 +66,6 @@ export default function PurchaseOrdersPage() {
     po: null,
   });
   const [detailId, setDetailId] = useState<number | null>(null);
-  const [planModal, setPlanModal] = useState<{ open: boolean; line: PlanLineContext | null }>({
-    open: false,
-    line: null,
-  });
-  const [dispatchModal, setDispatchModal] = useState<{
-    open: boolean;
-    line: DispatchLineContext | null;
-  }>({ open: false, line: null });
 
   const query = useApiQuery<Page<PurchaseOrderSummary>>(
     `/purchase-orders${qs({
@@ -90,7 +81,8 @@ export default function PurchaseOrdersPage() {
 
   const data = query.data;
   const loading = query.loading;
-  const columns = 8;
+  const columns = 7;
+  const units = useApiQuery<Unit[]>("/units?include_inactive=true");
 
   useEffect(() => {
     if (!notice) return;
@@ -117,49 +109,8 @@ export default function PurchaseOrdersPage() {
     setPoModal({ open: true, po });
   }
 
-  function openPlan(po: PurchaseOrder, line: PurchaseOrder["lines"][number]) {
-    setDetailId(null);
-    setPlanModal({
-      open: true,
-      line: {
-        po_line_id: line.id,
-        po_number: po.po_number,
-        customer_name: po.customer_name,
-        unit_number: po.unit_number,
-        item_name: line.item_name,
-        item_family: line.item_family,
-        quantity: line.quantity,
-        planned_quantity: line.planned_quantity,
-        dispatched_quantity: line.dispatched_quantity,
-        balance_quantity: line.balance_quantity,
-        available_to_plan: line.available_to_plan,
-      },
-    });
-  }
-
-  function openDispatch(po: PurchaseOrder, line: PurchaseOrder["lines"][number]) {
-    setDetailId(null);
-    setDispatchModal({
-      open: true,
-      line: {
-        po_line_id: line.id,
-        po_number: po.po_number,
-        customer_name: po.customer_name,
-        unit_number: po.unit_number,
-        item_name: line.item_name,
-        item_family: line.item_family,
-        quantity: line.quantity,
-        planned_quantity: line.planned_quantity,
-        dispatched_quantity: line.dispatched_quantity,
-        balance_quantity: line.balance_quantity,
-      },
-    });
-  }
-
   function handleSaved(message: string) {
     setPoModal({ open: false, po: null });
-    setPlanModal({ open: false, line: null });
-    setDispatchModal({ open: false, line: null });
     setNotice(message);
     setRefresh((value) => value + 1);
   }
@@ -168,7 +119,7 @@ export default function PurchaseOrdersPage() {
     <div className="space-y-5">
       <PageHeader
         title="Purchase Orders"
-        description="Customer orders and line balances. Planning and dispatch quantities are derived automatically."
+        description="PO numbers and item quantities maintained for bookkeeping only. Dispatch plans and sales are managed independently."
         actions={
           writable && (
             <Button onClick={openCreate}>
@@ -196,7 +147,7 @@ export default function PurchaseOrdersPage() {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search by PO number, customer or unit"
+              placeholder="Search by eight-digit PO number"
               className="pl-9"
               aria-label="Search purchase orders"
             />
@@ -252,7 +203,7 @@ export default function PurchaseOrdersPage() {
           <thead className="bg-slate-50/70">
             <tr>
               <SortHeader
-                label="PO / customer"
+                label="PO number"
                 column="po_number"
                 sort={sort}
                 order={order}
@@ -265,33 +216,9 @@ export default function PurchaseOrdersPage() {
                 order={order}
                 onSort={handleSort}
               />
-              <SortHeader
-                label="Ordered"
-                column="total_quantity"
-                sort={sort}
-                order={order}
-                onSort={handleSort}
-                align="right"
-              />
-              <SortHeader
-                label="Planned"
-                column="total_planned"
-                sort={sort}
-                order={order}
-                onSort={handleSort}
-                align="right"
-              />
-              <SortHeader
-                label="Dispatched"
-                column="total_dispatched"
-                sort={sort}
-                order={order}
-                onSort={handleSort}
-                align="right"
-              />
-              <th scope="col" className="px-4 py-3 text-right text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                Balance
-              </th>
+              <th className="px-4 py-3 text-left text-xs uppercase text-slate-500">Units / Locations</th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-semibold tracking-wide text-slate-500 uppercase">Items</th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-semibold tracking-wide text-slate-500 uppercase">Total quantity</th>
               <SortHeader
                 label="Status"
                 column="status"
@@ -312,7 +239,7 @@ export default function PurchaseOrdersPage() {
                 colSpan={columns}
                 message={
                   writable
-                    ? "No purchase orders match these filters. Create one to start planning."
+                    ? "No purchase orders match these filters. Create one to keep the PO reference on record."
                     : "No purchase orders match these filters."
                 }
               />
@@ -322,25 +249,16 @@ export default function PurchaseOrdersPage() {
                   <td className="px-4 py-3">
                     <p className="font-medium whitespace-nowrap text-slate-900">{po.po_number}</p>
                     <p className="text-xs text-slate-500">
-                      {po.customer_name} · {po.unit_number} · {po.line_count}{" "}
+                      {po.line_count}{" "}
                       {po.line_count === 1 ? "line" : "lines"}
                     </p>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-slate-600">
                     {formatDate(po.po_date)}
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">
-                    {formatQuantity(po.total_quantity)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-amber-700">
-                    {formatQuantity(po.total_planned)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-indigo-700">
-                    {formatQuantity(po.total_dispatched)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-700">
-                    {formatQuantity(po.total_balance)}
-                  </td>
+                  <td className="px-4 py-3 text-slate-600">{po.unit_ids.map(id=>units.data?.find(u=>u.id===id)?.name??`#${id}`).join(", ")||po.unit_number||"—"}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">{po.line_count}</td>
+                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{formatQuantity(po.total_quantity)}</td>
                   <td className="px-4 py-3">
                     <Badge tone={poStatusTone(po.status)}>{STATUS_LABELS[po.status]}</Badge>
                   </td>
@@ -365,8 +283,6 @@ export default function PurchaseOrdersPage() {
           writable={writable}
           onClose={() => setDetailId(null)}
           onEdit={openEdit}
-          onPlan={openPlan}
-          onDispatch={openDispatch}
           onChanged={(message) => {
             setNotice(message);
             setRefresh((value) => value + 1);
@@ -384,25 +300,6 @@ export default function PurchaseOrdersPage() {
         />
       )}
 
-      {planModal.open && (
-        <PlanModal
-          key={planModal.line?.po_line_id ?? "new"}
-          open
-          line={planModal.line}
-          onClose={() => setPlanModal({ open: false, line: null })}
-          onSaved={handleSaved}
-        />
-      )}
-
-      {dispatchModal.open && (
-        <DispatchModal
-          key={dispatchModal.line?.po_line_id ?? "new"}
-          open
-          line={dispatchModal.line}
-          onClose={() => setDispatchModal({ open: false, line: null })}
-          onSaved={handleSaved}
-        />
-      )}
     </div>
   );
 }

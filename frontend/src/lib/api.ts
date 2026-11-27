@@ -68,3 +68,15 @@ export function qs(params: Record<string, string | number | boolean | null | und
   const result = search.toString();
   return result ? `?${result}` : "";
 }
+
+export async function downloadReport(path: string, filename: string): Promise<void> {
+  const token = getToken();
+  const response = await fetch(`${API_BASE}${path}`, {headers: token ? {Authorization:`Bearer ${token}`} : {},cache:"no-store"});
+  if (!response.ok) {
+    if(response.status===401){clearToken();window.dispatchEvent(new Event("inventory:unauthorized"));}
+    const detail=await response.json().catch(()=>null);
+    throw new ApiError(response.status,typeof detail?.detail==="string"?detail.detail:`Report export failed (${response.status})`);
+  }
+  const url=URL.createObjectURL(await response.blob());
+  const anchor=document.createElement("a");anchor.href=url;anchor.download=filename;document.body.appendChild(anchor);anchor.click();anchor.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+}

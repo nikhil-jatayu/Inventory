@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models import PlanStatus, Priority, Role, User
 from app.schemas.common import Message
 from app.schemas.planning import (
+    GanttPlan,
     DispatchPlanCreate,
     DispatchPlanOut,
     DispatchPlanUpdate,
@@ -106,3 +107,23 @@ def stock_vs_schedule(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/dispatch-gantt", response_model=list[GanttPlan])
+def dispatch_gantt(
+    _: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    date_from: date, date_to: date,
+    family: str | None = None, priority: Priority | None = None,
+    status_filter: Annotated[PlanStatus | None, Query(alias="status")] = None,
+    search: str | None = None,
+) -> list[GanttPlan]:
+    return planning_service.list_gantt_plans(db, date_from=date_from, date_to=date_to,
+        family=family, priority=priority, status_filter=status_filter, search=search)
+
+
+from app.schemas.planning import DispatchPlanCreateBatch
+
+@router.post("/dispatch-plans/batch", response_model=list[DispatchPlanOut], status_code=201)
+def create_plan_batch(payload: DispatchPlanCreateBatch, _: Writer, db: Annotated[Session, Depends(get_db)]) -> list[DispatchPlanOut]:
+    return planning_service.create_plan_batch(db, payload)

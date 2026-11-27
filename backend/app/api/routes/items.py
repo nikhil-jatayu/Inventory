@@ -21,7 +21,7 @@ def list_items(
     search: str | None = None,
     family: str | None = None,
     is_active: bool | None = None,
-    sort: Annotated[str, Query(pattern="^(name|family|reorder_level|critical_level|created_at)$")] = "name",
+    sort: Annotated[str, Query(pattern="^(name|project|family|reorder_level|critical_level|created_at)$")] = "name",
     order: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=5, le=100)] = 20,
@@ -46,13 +46,20 @@ def list_families(
     return ItemFamilyList(families=item_service.list_families(db))
 
 
+@router.get("/projects", response_model=list[str])
+def list_projects(_: Annotated[User, Depends(get_current_user)], db: Annotated[Session, Depends(get_db)]) -> list[str]:
+    from sqlalchemy import select
+    from app.models import Item
+    return list(db.scalars(select(Item.project).distinct().order_by(Item.project)).all())
+
+
 @router.post("", response_model=ItemOut, status_code=status.HTTP_201_CREATED)
 def create_item(
     payload: ItemCreate,
     _: Writer,
     db: Annotated[Session, Depends(get_db)],
 ) -> ItemOut:
-    return ItemOut.model_validate(item_service.create_item(db, payload))
+    return item_service.get_item_out(db, item_service.create_item(db, payload))
 
 
 @router.patch("/{item_id}", response_model=ItemOut)
@@ -62,7 +69,7 @@ def update_item(
     _: Writer,
     db: Annotated[Session, Depends(get_db)],
 ) -> ItemOut:
-    return ItemOut.model_validate(item_service.update_item(db, item_id, payload))
+    return item_service.get_item_out(db, item_service.update_item(db, item_id, payload))
 
 
 @router.delete("/{item_id}", response_model=Message)
