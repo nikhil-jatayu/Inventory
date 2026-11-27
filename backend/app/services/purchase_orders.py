@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.models import Dispatch, DispatchPlan, Item, POLine, POStatus, PlanStatus, PurchaseOrder
+from app.models import Dispatch, DispatchPlan, Item, POLine, POStatus, PlanStatus, PurchaseOrder, PurchaseOrderUnit, Unit
 from app.schemas.common import Page
 from app.schemas.purchase_orders import (
     POLineInput,
@@ -166,6 +166,7 @@ def list_purchase_orders(
         dispatched = as_decimal(total_dispatched)
         items.append(
             PurchaseOrderSummary(
+                unit_ids=_get_po_unit_ids(db, po.id),
                 id=po.id,
                 po_number=po.po_number,
                 customer_name=po.customer_name,
@@ -187,6 +188,33 @@ def list_purchase_orders(
         page_size=page_size,
         pages=max(1, (total + page_size - 1) // page_size),
     )
+
+
+def _validate_unit_ids(db: Session, unit_ids: list[int]) -> None:
+    if len(unit_ids) > 100 or len(unit_ids) != len(set(unit_ids)):
+        raise AppError(422, "Select up to 100 different units")
+    if not unit_ids:
+        return
+    active_ids = set(db.scalars(
+        select(Unit.id).where(Unit.id.in_(unit_ids), Unit.is_active.is_(True))
+    ).all())
+    if active_ids != set(unit_ids):
+        raise AppError(422, "One or more selected units are not active")
+
+
+def _set_po_units(db: Session, po_id: int, unit_ids: list[int]) -> None:
+    _validate_unit_ids(db, unit_ids)
+    db.query(PurchaseOrderUnit).filter(PurchaseOrderUnit.po_id == po_id).delete(synchronize_session=False)
+    for unit_id in unit_ids:
+        db.add(PurchaseOrderUnit(po_id=po_id, unit_id=unit_id))
+
+
+def _get_po_unit_ids(db: Session, po_id: int) -> list[int]:
+    return list(db.scalars(
+        select(PurchaseOrderUnit.unit_id)
+        .where(PurchaseOrderUnit.po_id == po_id)
+        .order_by(PurchaseOrderUnit.unit_id)
+    ).all())
 
 
 def get_purchase_order(db: Session, po_id: int) -> PurchaseOrderOut:
@@ -214,6 +242,7 @@ def get_purchase_order(db: Session, po_id: int) -> PurchaseOrderOut:
         total_dispatched += dispatched
         lines.append(
             POLineOut(
+                project=item.project,
                 id=line.id,
                 item_id=item.id,
                 item_name=item.name,
@@ -238,6 +267,7 @@ def get_purchase_order(db: Session, po_id: int) -> PurchaseOrderOut:
         total_planned=total_planned,
         total_dispatched=total_dispatched,
         total_balance=total_quantity - total_dispatched,
+        unit_ids=_get_po_unit_ids(db, po.id),
         lines=lines,
     )
 
@@ -348,6 +378,7 @@ def _validate_line_items(db: Session, lines: list[POLineInput]) -> None:
 def create_purchase_order(db: Session, payload: PurchaseOrderCreate) -> PurchaseOrderOut:
     _ensure_unique_number(db, payload.po_number)
     _validate_line_items(db, payload.lines)
+    _validate_unit_ids(db, payload.unit_ids)
 
     po = PurchaseOrder(
         po_number=payload.po_number,
@@ -359,6 +390,7 @@ def create_purchase_order(db: Session, payload: PurchaseOrderCreate) -> Purchase
     db.add(po)
     try:
         db.flush()
+        _set_po_units(db, po.id, payload.unit_ids)
         for line in payload.lines:
             db.add(POLine(po_id=po.id, item_id=line.item_id, quantity=line.quantity))
         db.commit()
@@ -459,6 +491,8 @@ def update_purchase_order(
 
     if payload.lines is not None:
         _apply_lines(db, po, payload.lines)
+    if payload.unit_ids is not None:
+        _set_po_units(db, po.id, payload.unit_ids)
 
     refresh_po_status(db, po)
     try:

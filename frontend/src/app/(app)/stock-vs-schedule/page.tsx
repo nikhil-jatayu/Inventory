@@ -213,8 +213,8 @@ export default function StockVsSchedulePage() {
       </section>
 
       <p className="rounded-lg bg-slate-100/70 px-3.5 py-2.5 text-xs leading-relaxed text-slate-500">
-        Planned quantity counts dispatch plans dated inside the period that are not yet completed.
-        Shortfall is the positive difference between planned quantity and available stock.
+        Outstanding demand is the unfulfilled quantity of plans starting in the selected period.
+        Shortfall compares that demand with live stock for each item. Threshold status is independent of schedule coverage.
       </p>
 
       <TableShell
@@ -241,6 +241,9 @@ export default function StockVsSchedulePage() {
                 onSort={handleSort}
               />
               <th scope="col" className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                Project
+              </th>
+              <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">
                 Family
               </th>
               <SortHeader
@@ -252,7 +255,7 @@ export default function StockVsSchedulePage() {
                 align="right"
               />
               <SortHeader
-                label="Planned"
+                label="Outstanding demand"
                 column="planned"
                 sort={sort}
                 order={order}
@@ -268,7 +271,7 @@ export default function StockVsSchedulePage() {
                 align="right"
               />
               <SortHeader
-                label="Stock status"
+                label="Threshold status"
                 column="status"
                 sort={sort}
                 order={order}
@@ -281,9 +284,9 @@ export default function StockVsSchedulePage() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {query.loading ? (
-              <LoadingRow colSpan={7} />
+              <LoadingRow colSpan={8} />
             ) : !data || data.items.length === 0 ? (
-              <EmptyRow colSpan={7} message="No items match these filters for the selected period." />
+              <EmptyRow colSpan={8} message="No items match these filters for the selected period." />
             ) : (
               data.items.map((row) => (
                 <tr key={row.item_id} className="transition-colors hover:bg-slate-50/60">
@@ -293,6 +296,7 @@ export default function StockVsSchedulePage() {
                       <p className="text-xs text-rose-600">Shortfall against schedule</p>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-slate-600">{row.project}</td>
                   <td className="px-4 py-3 text-slate-600">{row.family}</td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">
                     {formatQuantity(row.available)}

@@ -13,6 +13,8 @@ import {
   X,
 } from "lucide-react";
 
+import type { GanttPlan } from "@/components/planning/dispatch-calendar";
+import { BatchPlanModal } from "@/components/planning/batch-plan-modal";
 import { PlanModal } from "@/components/planning/plan-modal";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +43,7 @@ const DispatchCalendar = dynamic(
     ssr: false,
     loading: () => (
       <div className="flex h-120 items-center justify-center text-sm text-slate-500">
-        Loading calendar…
+        Loading Gantt…
       </div>
     ),
   },
@@ -66,6 +68,7 @@ export default function PlanningPage() {
   const writable = canWrite(user?.role, "planning");
 
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  const [showWarnings, setShowWarnings] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [priority, setPriority] = useState<Priority | "">("");
@@ -85,9 +88,9 @@ export default function PlanningPage() {
     );
   }, []);
 
-  const query = useApiQuery<DispatchPlan[]>(
+  const query = useApiQuery<GanttPlan[]>(
     range
-      ? `/dispatch-plans${qs({
+      ? `/dispatch-gantt${qs({
           date_from: range.from,
           date_to: range.to,
           priority,
@@ -126,7 +129,7 @@ export default function PlanningPage() {
     <div className="space-y-5">
       <PageHeader
         title="Dispatch Planning"
-        description="Monthly dispatch calendar. Warnings flag plans that fall inside the lead time for their priority."
+        description="Plan dispatch quantities by item, location and date range. The Gantt view highlights category and fulfilment status."
         actions={
           writable && (
             <Button onClick={() => setModal({ open: true, plan: null })}>
@@ -151,7 +154,7 @@ export default function PlanningPage() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by item, PO, customer or unit"
+              placeholder="Search by item, project or unit"
               className="pl-9"
               aria-label="Search dispatch plans"
             />
@@ -200,7 +203,7 @@ export default function PlanningPage() {
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid gap-4">
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600">
@@ -217,7 +220,7 @@ export default function PlanningPage() {
             <div className="flex items-center gap-3 text-xs text-slate-500">
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-amber-200" />
-                Lead-time warning
+                Short-duration warning
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <CalendarDays className="h-3.5 w-3.5" />
@@ -229,6 +232,7 @@ export default function PlanningPage() {
           <div className="p-2 sm:p-3">
             <DispatchCalendar
               plans={plans}
+              loading={query.loading}
               onSelectPlan={setSelected}
               onRangeChange={handleRangeChange}
               onSelectDate={
@@ -249,7 +253,7 @@ export default function PlanningPage() {
                     {selected.item_name}
                   </p>
                   <p className="truncate text-xs text-slate-500">
-                    {selected.po_number} · {selected.customer_name}
+                    {selected.po_number ? `PO ${selected.po_number}` : "Independent dispatch plan"}
                   </p>
                 </div>
                 <button
@@ -267,16 +271,17 @@ export default function PlanningPage() {
                     {PRIORITY_LABELS[selected.priority]}
                   </Badge>
                   <Badge tone={planStatusTone(selected.status)}>{selected.status}</Badge>
-                  {selected.warning && <Badge tone="rose">Lead time</Badge>}
+                  {selected.warning && <Badge tone="rose">Short duration</Badge>}
                 </div>
                 <dl className="grid grid-cols-2 gap-2 text-xs">
                   {[
-                    ["Dispatch date", formatDate(selected.planned_date)],
+                    ["Date range", `${formatDate(selected.planned_date)} – ${formatDate(selected.planned_end_date)}`],
                     ["Quantity", formatQuantity(selected.quantity)],
                     ["Fulfilled", formatQuantity(selected.fulfilled_quantity)],
                     ["Outstanding", formatQuantity(selected.outstanding_quantity)],
-                    ["Unit", selected.unit_number],
+                    ["Unit", selected.unit_name ?? selected.unit_number ?? "—"],
                     ["Family", selected.item_family],
+                    ["Project", selected.project],
                     ["Lead time", `${selected.lead_time_days} days`],
                     [
                       "Days from today",
@@ -320,16 +325,17 @@ export default function PlanningPage() {
             <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
               <h2 className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-900">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Lead-time warnings
+                Short-duration warnings
               </h2>
               <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200 ring-inset">
                 {warnings.length}
               </span>
             </div>
-            <div className="max-h-96 overflow-y-auto">
+            <button type="button" aria-expanded={showWarnings} onClick={() => setShowWarnings(v => !v)} className="px-4 py-2 text-sm text-indigo-700">{showWarnings ? "Hide warnings" : "Show warnings"}</button>
+            {showWarnings && <div className="max-h-96 overflow-y-auto">
               {warnings.length === 0 ? (
                 <p className="px-4 py-6 text-center text-sm text-slate-500">
-                  No plans fall inside their priority lead time in this period.
+                  No outstanding plans have a short duration in this timeline.
                 </p>
               ) : (
                 <ul className="divide-y divide-slate-100">
@@ -345,14 +351,14 @@ export default function PlanningPage() {
                             {plan.item_name}
                           </p>
                           <p className="truncate text-xs text-slate-500">
-                            {plan.po_number} · {plan.customer_name}
+                            {plan.project} · {plan.unit_name ?? plan.unit_number ?? "Unit not set"}
                           </p>
                           <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-500">
                             <Clock className="h-3 w-3" />
-                            {formatDate(plan.planned_date)} ·{" "}
-                            {plan.days_until < 0
-                              ? `${Math.abs(plan.days_until)}d overdue`
-                              : `${plan.days_until}d away`}
+                            {formatDate(plan.planned_end_date)} ·{" "}
+                            {plan.days_until_end < 0
+                              ? `${Math.abs(plan.days_until_end)}d overdue`
+                              : plan.days_until <= 0 ? "In progress / due" : `${plan.days_until}d to start`}
                           </p>
                         </div>
                         <Badge tone={priorityTone(plan.priority)}>
@@ -363,17 +369,17 @@ export default function PlanningPage() {
                   ))}
                 </ul>
               )}
-            </div>
+            </div>}
           </section>
 
           <p className="rounded-xl bg-slate-100/70 px-3.5 py-3 text-xs leading-relaxed text-slate-500">
-            Click a date to add a plan, or click an event to inspect it. Lead times are configured
-            on the server: Normal, Urgent and Emergency priorities each have their own window.
+            Click a date to start a plan, or select a Gantt bar to inspect it. Dispatch plans are independent of PO bookkeeping; actual dispatches fulfil the selected plan.
           </p>
         </aside>
       </div>
 
-      {modal.open && (
+      {modal.open && !modal.plan && <BatchPlanModal key={modal.defaultDate??"new"} open kind="dispatch" defaultDate={modal.defaultDate} onClose={()=>setModal({open:false,plan:null})} onSaved={handleSaved}/>}
+      {modal.open && modal.plan && (
         <PlanModal
           key={modal.plan?.id ?? modal.defaultDate ?? "new"}
           open

@@ -8,14 +8,22 @@ from app.schemas.common import APIModel, Quantity
 
 class ItemCreate(APIModel):
     name: str = Field(min_length=1, max_length=160)
+    project: str = Field(min_length=1, max_length=160)
     family: str = Field(min_length=1, max_length=80)
+    model_no: str | None = Field(default=None, max_length=120)
+    opening_inventory: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("9999999999"))
     reorder_level: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("9999999999"))
     critical_level: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("9999999999"))
 
-    @field_validator("name", "family")
+    @field_validator("name", "project", "family")
     @classmethod
-    def strip_text(cls, value: str) -> str:
+    def strip_required_text(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("model_no")
+    @classmethod
+    def strip_model(cls, value: str | None) -> str | None:
+        return value.strip() if value and value.strip() else None
 
     @model_validator(mode="after")
     def validate_levels(self) -> "ItemCreate":
@@ -26,21 +34,31 @@ class ItemCreate(APIModel):
 
 class ItemUpdate(APIModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
+    project: str | None = Field(default=None, min_length=1, max_length=160)
     family: str | None = Field(default=None, min_length=1, max_length=80)
+    model_no: str | None = Field(default=None, max_length=120)
     reorder_level: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999999"))
     critical_level: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999999"))
     is_active: bool | None = None
 
-    @field_validator("name", "family")
+    @field_validator("name", "project", "family")
     @classmethod
-    def strip_text(cls, value: str | None) -> str | None:
+    def strip_required_text(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else None
+
+    @field_validator("model_no")
+    @classmethod
+    def strip_model(cls, value: str | None) -> str | None:
+        return value.strip() if value and value.strip() else None
 
 
 class ItemOut(APIModel):
     id: int
     name: str
+    project: str
     family: str
+    model_no: str | None
+    current_inventory: Quantity = Decimal("0")
     reorder_level: Quantity
     critical_level: Quantity
     is_active: bool

@@ -128,16 +128,16 @@ export default function DispatchesPage() {
   const reportSummary = report
     ? [
         {
-          label: "Dispatched (FY)",
-          value: formatQuantity(report.total_dispatched),
-          hint: activeFy ? `Financial year ${activeFy}` : "Selected financial year",
+          label: "Net Sales (FY)",
+          value: formatQuantity(report.total_sales),
+          hint: activeFy ? `Actual dispatches · ${activeFy}` : "Selected financial year",
           icon: Truck,
           tone: "indigo" as const,
         },
         {
-          label: "Planned (FY)",
+          label: "Total Dispatch Plan (FY)",
           value: formatQuantity(report.total_planned),
-          hint: "Plan quantities dated in the year",
+          hint: "Planned quantities dated in the year",
           icon: Target,
           tone: "amber" as const,
         },
@@ -162,7 +162,7 @@ export default function DispatchesPage() {
     <div className="space-y-5">
       <PageHeader
         title="Actual Dispatch"
-        description="Record dispatched quantities, watch plans fulfil automatically, and review monthly and financial-year performance."
+        description="Record actual quantities against a selected dispatch plan. Each dispatch updates stock and creates a sales invoice automatically."
         actions={
           writable && (
             <Button onClick={() => setModalOpen(true)}>
@@ -243,7 +243,7 @@ export default function DispatchesPage() {
             <div>
               <h2 className="text-sm font-semibold text-slate-900">Monthly summary</h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                Planned and dispatched quantities for {report.fy}.
+                Planned quantities, actual dispatches and net sales after linked unit rejections for {report.fy}.
               </p>
             </div>
           </div>
@@ -261,6 +261,9 @@ export default function DispatchesPage() {
                     Dispatched
                   </th>
                   <th scope="col" className="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                    Net Sales
+                  </th>
+                  <th scope="col" className="px-4 py-2.5 text-right text-xs font-semibold tracking-wide text-slate-500 uppercase">
                     Cumulative
                   </th>
                 </tr>
@@ -276,6 +279,9 @@ export default function DispatchesPage() {
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums text-indigo-700">
                       {formatQuantity(month.dispatched)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-emerald-700">
+                      {formatQuantity(month.sales)}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-700">
                       {formatQuantity(month.cumulative)}
@@ -426,14 +432,14 @@ export default function DispatchesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-medium text-slate-900">{record.item_name}</p>
-                    <p className="text-xs text-slate-500">{record.item_family}</p>
+                    <p className="text-xs text-slate-500">{record.project} · {record.item_family}</p>
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-medium whitespace-nowrap text-slate-900">
-                      {record.po_number}
+                      {record.invoice_number ?? "—"}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {record.customer_name} · {record.unit_number}
+                      {record.po_number ? `PO ${record.po_number}` : "No PO reference"} · {record.unit_name ?? record.unit_number ?? "Unit not set"}
                     </p>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums text-indigo-700">

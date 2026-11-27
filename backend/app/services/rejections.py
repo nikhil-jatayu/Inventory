@@ -1,4 +1,6 @@
 from datetime import date
+from uuid import uuid4
+from app.services.balances import rejected_for_dispatch
 
 from sqlalchemy import case, func, literal, or_, select
 from sqlalchemy.orm import Session
@@ -13,9 +15,10 @@ from app.core.fiscal import (
     month_label,
     parse_fiscal_year,
 )
-from app.models import Item, Rejection, RejectionIssue, User
+from app.models import Dispatch, SalesRecord, Item, Rejection, RejectionIssue, Unit, User
 from app.schemas.common import Page
 from app.schemas.rejections import (
+    RejectionBatchCreate,
     RejectionCreate,
     RejectionIssueCreate,
     RejectionIssueList,
@@ -137,24 +140,6 @@ def deactivate_issue(db: Session, issue_id: int) -> RejectionIssueOut:
     return _issue_out(issue)
 
 
-def _resolve_issue(db: Session, payload: RejectionCreate) -> RejectionIssue:
-    if payload.issue_id is not None:
-        issue = db.get(RejectionIssue, payload.issue_id)
-        if issue is None:
-            raise AppError(404, "Rejection issue not found")
-        return issue
-
-    name = _normalise_name(payload.issue_name or "")
-    existing = _find_issue_by_name(db, name)
-    if existing is not None:
-        if not existing.is_active:
-            existing.is_active = True
-        return existing
-
-    issue = RejectionIssue(name=name)
-    db.add(issue)
-    db.flush()
-    return issue
 
 
 def apply_rejection_stock_effect(db: Session, rejection: Rejection) -> None:
@@ -169,53 +154,77 @@ def apply_rejection_stock_effect(db: Session, rejection: Rejection) -> None:
 
 def _rejection_out(db: Session, rejection_id: int) -> RejectionOut:
     row = db.execute(
-        select(Rejection, Item, RejectionIssue, User)
+        select(Rejection, Item, RejectionIssue, User, Unit)
         .join(Item, Item.id == Rejection.item_id)
-        .join(RejectionIssue, RejectionIssue.id == Rejection.issue_id)
+        .outerjoin(RejectionIssue, RejectionIssue.id == Rejection.issue_id)
         .join(User, User.id == Rejection.recorded_by)
+        .outerjoin(Unit, Unit.id == Rejection.unit_id)
         .where(Rejection.id == rejection_id)
     ).first()
     if row is None:
         raise AppError(404, "Rejection not found")
 
-    rejection, item, issue, user = row
+    rejection, item, issue, user, unit = row
     return RejectionOut(
-        id=rejection.id,
+        id=rejection.id, dispatch_id=rejection.dispatch_id, batch_id=rejection.batch_id,
+        invoice_number=db.scalar(select(SalesRecord.invoice_number).where(SalesRecord.dispatch_id == rejection.dispatch_id)) if rejection.dispatch_id else None,
+        rgp_number=rejection.rgp_number,
+        unit_id=unit.id if unit else None,
+        unit_name=unit.name if unit else None,
         item_id=item.id,
         item_name=item.name,
-        item_family=item.family,
+        item_family=item.family, project=item.project,
         rejection_date=rejection.rejection_date,
         quantity=rejection.quantity,
-        issue_id=issue.id,
-        issue_name=issue.name,
+        issue_id=issue.id if issue else None,
+        issue_name=issue.name if issue else None,
         remarks=rejection.remarks,
         recorded_by=user.id,
         recorded_by_name=user.full_name,
     )
 
 
-def record_rejection(
-    db: Session, payload: RejectionCreate, *, recorded_by: User
-) -> RejectionOut:
-    item = db.get(Item, payload.item_id)
-    if item is None:
-        raise AppError(404, "Item not found")
+def record_rejection(db: Session, payload: RejectionCreate, *, recorded_by: User) -> RejectionOut:
+    return record_rejection_batch(db, RejectionBatchCreate(rgp_number=payload.rgp_number, unit_id=payload.unit_id,
+        rejection_date=payload.rejection_date, lines=[payload.model_dump()]), recorded_by=recorded_by, remarks=payload.remarks)[0]
 
-    issue = _resolve_issue(db, payload)
-    rejection = Rejection(
-        item_id=item.id,
-        rejection_date=payload.rejection_date,
-        quantity=payload.quantity,
-        issue_id=issue.id,
-        remarks=payload.remarks,
-        recorded_by=recorded_by.id,
-    )
-    db.add(rejection)
-    apply_rejection_stock_effect(db, rejection)
-    db.commit()
-    db.refresh(rejection)
 
-    return _rejection_out(db, rejection.id)
+def record_rejection_batch(db: Session, payload: RejectionBatchCreate, *, recorded_by: User, remarks=None) -> list[RejectionOut]:
+    try:
+        unit = db.get(Unit, payload.unit_id)
+        if unit is None or not unit.is_active:
+            raise AppError(422, "Select an active unit")
+        if payload.rejection_date > date.today():
+            raise AppError(422, "Rejection date cannot be in the future")
+        ids = [line.dispatch_id for line in payload.lines]
+        if None in ids or len(set(ids)) != len(ids):
+            raise AppError(422, "Select a different actual dispatch for each row")
+        dispatches = {d.id:d for d in db.scalars(select(Dispatch).where(Dispatch.id.in_(ids)).order_by(Dispatch.id).with_for_update().execution_options(populate_existing=True)).all()}
+        batch_id = str(uuid4())
+        records = []
+        for line in payload.lines:
+            d = dispatches.get(line.dispatch_id)
+            if d is None or d.unit_id != unit.id or d.item_id != line.item_id:
+                raise AppError(422, "Dispatch does not match the selected unit and item")
+            if d.dispatch_date > payload.rejection_date:
+                raise AppError(422, "Rejection cannot precede actual dispatch")
+            if db.scalar(select(SalesRecord.id).where(SalesRecord.dispatch_id == d.id)) is None:
+                raise AppError(422, "Dispatch has no recorded sale; historical reconciliation is required")
+            remaining = d.quantity - db.scalar(select(rejected_for_dispatch(d.id)))
+            if line.quantity > remaining:
+                raise AppError(422, f"Quantity exceeds unrejected quantity for dispatch #{d.id}")
+            record = Rejection(dispatch_id=d.id, batch_id=batch_id, rgp_number=payload.rgp_number, unit_id=unit.id,
+                item_id=d.item_id, rejection_date=payload.rejection_date, quantity=line.quantity, issue_id=None,
+                recorded_by=recorded_by.id, remarks=remarks)
+            db.add(record)
+            records.append(record)
+        db.flush()
+        result = [_rejection_out(db, record.id) for record in records]
+        db.commit()
+        return result
+    except Exception:
+        db.rollback()
+        raise
 
 
 def list_rejections(
@@ -230,11 +239,14 @@ def list_rejections(
     order: str,
     page: int,
     page_size: int,
+    unit_id: int | None = None,
 ) -> Page[RejectionOut]:
     if date_from and date_to and date_from > date_to:
         raise AppError(422, "The start date must be on or before the end date")
 
     filters = []
+    if unit_id:
+        filters.append(Rejection.unit_id == unit_id)
     if date_from:
         filters.append(Rejection.rejection_date >= date_from)
     if date_to:
@@ -249,7 +261,10 @@ def list_rejections(
             or_(
                 Item.name.ilike(needle),
                 Item.family.ilike(needle),
+                Item.project.ilike(needle),
                 RejectionIssue.name.ilike(needle),
+                Rejection.rgp_number.ilike(needle),
+                Unit.name.ilike(needle),
                 Rejection.remarks.ilike(needle),
             )
         )
@@ -259,7 +274,8 @@ def list_rejections(
             select(func.count(Rejection.id))
             .select_from(Rejection)
             .join(Item, Item.id == Rejection.item_id)
-            .join(RejectionIssue, RejectionIssue.id == Rejection.issue_id)
+            .outerjoin(RejectionIssue, RejectionIssue.id == Rejection.issue_id)
+            .outerjoin(Unit, Unit.id == Rejection.unit_id)
             .where(*filters)
         )
         or 0
@@ -268,10 +284,11 @@ def list_rejections(
     sort_column = REJECTION_SORT_COLUMNS.get(sort, Rejection.rejection_date)
     ordering = sort_column.desc() if order == "desc" else sort_column.asc()
     rows = db.execute(
-        select(Rejection, Item, RejectionIssue, User)
+        select(Rejection, Item, RejectionIssue, User, Unit)
         .join(Item, Item.id == Rejection.item_id)
-        .join(RejectionIssue, RejectionIssue.id == Rejection.issue_id)
+        .outerjoin(RejectionIssue, RejectionIssue.id == Rejection.issue_id)
         .join(User, User.id == Rejection.recorded_by)
+        .outerjoin(Unit, Unit.id == Rejection.unit_id)
         .where(*filters)
         .order_by(ordering, Rejection.id.desc())
         .offset((page - 1) * page_size)
@@ -280,19 +297,23 @@ def list_rejections(
 
     items = [
         RejectionOut(
-            id=rejection.id,
+            id=rejection.id, dispatch_id=rejection.dispatch_id, batch_id=rejection.batch_id,
+        invoice_number=db.scalar(select(SalesRecord.invoice_number).where(SalesRecord.dispatch_id == rejection.dispatch_id)) if rejection.dispatch_id else None,
+            rgp_number=rejection.rgp_number,
+            unit_id=unit.id if unit else None,
+            unit_name=unit.name if unit else None,
             item_id=item.id,
             item_name=item.name,
-            item_family=item.family,
+            item_family=item.family, project=item.project,
             rejection_date=rejection.rejection_date,
             quantity=rejection.quantity,
-            issue_id=issue.id,
-            issue_name=issue.name,
+            issue_id=issue.id if issue else None,
+            issue_name=issue.name if issue else None,
             remarks=rejection.remarks,
             recorded_by=user.id,
             recorded_by_name=user.full_name,
         )
-        for rejection, item, issue, user in rows
+        for rejection, item, issue, user, unit in rows
     ]
 
     return Page[RejectionOut](

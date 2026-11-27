@@ -12,13 +12,14 @@ interface ModalProps {
   description?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
 const widths = {
   sm: "sm:max-w-md",
   md: "sm:max-w-lg",
   lg: "sm:max-w-2xl",
+  xl: "sm:max-w-5xl",
 };
 
 export function Modal({ open, onClose, title, description, children, footer, size = "md" }: ModalProps) {

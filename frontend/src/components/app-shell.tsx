@@ -12,8 +12,12 @@ import {
   LogOut,
   Menu,
   Package,
+  PackageCheck,
+  MapPin,
+  ReceiptText,
   Scale,
   ShieldCheck,
+  ShoppingCart,
   Truck,
   Users,
   Warehouse,
@@ -31,7 +35,7 @@ const NAV = [
   {
     href: "/dashboard",
     label: "Dashboard",
-    description: "KPIs, calendar & charts",
+    description: "KPIs, Gantt & charts",
     icon: LayoutDashboard,
   },
   {
@@ -49,13 +53,31 @@ const NAV = [
   {
     href: "/purchase-orders",
     label: "Purchase Orders",
-    description: "Customer orders & lines",
+    description: "PO bookkeeping references",
     icon: ClipboardList,
+  },
+  {
+    href: "/purchases",
+    label: "Purchases",
+    description: "Received stock entries",
+    icon: ShoppingCart,
+  },
+  {
+    href: "/purchase-planning",
+    label: "Purchase Planning",
+    description: "Planned replenishment",
+    icon: CalendarDays,
+  },
+  {
+    href: "/purchase-rejections",
+    label: "Purchase Rejections",
+    description: "Purchase plan cancellations",
+    icon: PackageCheck,
   },
   {
     href: "/planning",
     label: "Dispatch Planning",
-    description: "Monthly dispatch calendar",
+    description: "Gantt dispatch timeline",
     icon: CalendarDays,
   },
   {
@@ -67,14 +89,32 @@ const NAV = [
   {
     href: "/dispatches",
     label: "Actual Dispatch",
-    description: "Dispatched quantities & reports",
+    description: "Dispatches against plans",
     icon: Truck,
   },
   {
+    href: "/sales",
+    label: "Sales",
+    description: "Generated dispatch invoices",
+    icon: ReceiptText,
+  },
+  {
+    href: "/units",
+    label: "Units / Locations",
+    description: "Manage dispatch destinations",
+    icon: MapPin,
+  },
+  {
     href: "/rejections",
-    label: "Quality Rejections",
-    description: "Rejections & recurring issues",
+    label: "Unit Rejections",
+    description: "Post-dispatch rejections",
     icon: BadgeAlert,
+  },
+  {
+    href: "/reports",
+    label: "Reports",
+    description: "Preview & export reports",
+    icon: ClipboardList,
   },
   {
     href: "/users",

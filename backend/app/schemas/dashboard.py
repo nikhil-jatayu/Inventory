@@ -8,7 +8,12 @@ class DashboardKPIs(APIModel):
     below_reorder_items: int
     total_shortfall: Quantity
     month_planned: Quantity
+    month_stock_available: Quantity
     month_dispatched: Quantity
+    month_sales: Quantity
+    month_gross_sales: Quantity
+    month_sales_rejected: Quantity
+    month_unlinked_rejected: Quantity
     month_rejected: Quantity
 
 
@@ -17,6 +22,7 @@ class DashboardMonth(APIModel):
     label: str
     planned: Quantity
     dispatched: Quantity
+    sales: Quantity
     rejected: Quantity
 
 
@@ -29,8 +35,8 @@ class DashboardCalendarDay(APIModel):
     emergency: int
 
 
-class DashboardIssue(APIModel):
-    issue_id: int
+class DashboardUnit(APIModel):
+    unit_id: int
     name: str
     quantity: Quantity
     count: int
@@ -48,4 +54,4 @@ class DashboardSummary(APIModel):
     kpis: DashboardKPIs
     months: list[DashboardMonth]
     calendar: list[DashboardCalendarDay]
-    issues: list[DashboardIssue]
+    unit_rejections: list[DashboardUnit]
